@@ -1,0 +1,32 @@
+# --- Node / backend ---
+backend/node_modules/
+backend/.env
+backend/npm-debug.log*
+backend/dist/
+
+# --- Android / Gradle ---
+android/.gradle/
+android/build/
+android/*/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/captures/
+android/.cxx/
+
+# --- Python / ML (future phases) ---
+**/__pycache__/
+**/*.pyc
+ml/.venv/
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+.vscode/
+
+# --- Secrets, always ---
+*.env
+!.env.example
+
+# --- Claude Code local session settings ---
+.claude/settings.local.json
