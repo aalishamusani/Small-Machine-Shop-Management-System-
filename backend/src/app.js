@@ -3,6 +3,7 @@ const cors = require('cors');
 
 const ordersRouter = require('./routes/orders.routes');
 const batchesRouter = require('./routes/batches.routes');
+const qualityLogsRouter = require('./routes/qualityLogs.routes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -25,6 +26,7 @@ app.get('/health', (req, res) => {
 
 app.use('/api/orders', ordersRouter);
 app.use('/api/batches', batchesRouter);
+app.use('/api/quality-logs', qualityLogsRouter);
 
 // 404 handler for anything that didn't match a route above.
 app.use((req, res) => {
