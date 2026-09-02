@@ -8,6 +8,8 @@ import com.smsms.app.model.CreateOrderRequest
 import com.smsms.app.model.CreateQualityLogRequest
 import com.smsms.app.model.Order
 import com.smsms.app.model.QualityLog
+import com.smsms.app.model.SalesForecast
+import com.smsms.app.model.SalesForecastRunResponse
 import com.smsms.app.model.UpdateBatchStatusRequest
 import com.smsms.app.network.ApiClient
 import com.smsms.app.util.ApiResult
@@ -67,4 +69,10 @@ object OrdersRepository {
 
     suspend fun listQualityLogs(batchId: Int): ApiResult<List<QualityLog>> =
         safeCall { api.listQualityLogs(batchId) }
+
+    suspend fun runSalesForecast(): ApiResult<SalesForecastRunResponse> =
+        safeCall { api.runSalesForecast() }
+
+    suspend fun listSalesForecast(): ApiResult<List<SalesForecast>> =
+        safeCall { api.listSalesForecast() }
 }

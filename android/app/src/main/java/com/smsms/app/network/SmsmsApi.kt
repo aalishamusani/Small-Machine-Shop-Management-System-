@@ -6,6 +6,8 @@ import com.smsms.app.model.CreateOrderRequest
 import com.smsms.app.model.CreateQualityLogRequest
 import com.smsms.app.model.Order
 import com.smsms.app.model.QualityLog
+import com.smsms.app.model.SalesForecast
+import com.smsms.app.model.SalesForecastRunResponse
 import com.smsms.app.model.UpdateBatchStatusRequest
 import com.smsms.app.model.UpdateOrderRequest
 import retrofit2.Response
@@ -53,4 +55,10 @@ interface SmsmsApi {
 
     @GET("api/batches/{batchId}/quality-logs")
     suspend fun listQualityLogs(@Path("batchId") batchId: Int): Response<List<QualityLog>>
+
+    @POST("api/sales-forecast/run")
+    suspend fun runSalesForecast(): Response<SalesForecastRunResponse>
+
+    @GET("api/sales-forecast")
+    suspend fun listSalesForecast(): Response<List<SalesForecast>>
 }
