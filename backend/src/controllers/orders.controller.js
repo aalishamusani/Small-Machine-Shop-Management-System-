@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const AppError = require('../utils/AppError');
 const { isNonEmptyString, isPositiveInt, isValidDateString } = require('../utils/validators');
+const { computeAccountSummary } = require('./payments.controller');
 
 // POST /api/orders
 // Creates a new customer order. `rate` (price per unit) is accepted as
@@ -67,8 +68,9 @@ async function listOrders(req, res) {
 }
 
 // GET /api/orders/:orderId
-// Returns the order together with its batches in one response, so the
-// Android order-detail screen doesn't need two round trips.
+// Returns the order together with its batches, payments, and a computed
+// account summary in one response, so the Android order-detail screen
+// doesn't need three more round trips.
 async function getOrder(req, res) {
   const { orderId } = req.params;
 
@@ -76,13 +78,24 @@ async function getOrder(req, res) {
   if (orderResult.rows.length === 0) {
     throw new AppError(404, 'Order not found.');
   }
+  const order = orderResult.rows[0];
 
   const batchesResult = await db.query(
     'SELECT * FROM batches WHERE order_id = $1 ORDER BY batch_id',
     [orderId]
   );
+  const paymentsResult = await db.query(
+    'SELECT * FROM payments WHERE order_id = $1 ORDER BY payment_date DESC, payment_id DESC',
+    [orderId]
+  );
+  const accountSummary = await computeAccountSummary(orderId, order.total_amount);
 
-  res.json({ ...orderResult.rows[0], batches: batchesResult.rows });
+  res.json({
+    ...order,
+    batches: batchesResult.rows,
+    payments: paymentsResult.rows,
+    account_summary: accountSummary,
+  });
 }
 
 // PATCH /api/orders/:orderId

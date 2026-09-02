@@ -3,6 +3,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { requireRole } = require('../middleware/auth');
 const ordersController = require('../controllers/orders.controller');
 const batchesController = require('../controllers/batches.controller');
+const paymentsController = require('../controllers/payments.controller');
 
 const router = express.Router();
 
@@ -21,5 +22,11 @@ router.patch('/:orderId/close', canWriteOrders, asyncHandler(ordersController.cl
 // through the order they belong to (POST/GET /api/orders/:orderId/batches).
 router.post('/:orderId/batches', canWriteOrders, asyncHandler(batchesController.createBatch));
 router.get('/:orderId/batches', asyncHandler(batchesController.listBatchesForOrder));
+
+// Payments are a sub-resource of an order too. Deliberately NOT gated by
+// order status (unlike batches) — payment can still be recorded against
+// a closed order.
+router.post('/:orderId/payments', canWriteOrders, asyncHandler(paymentsController.createPayment));
+router.get('/:orderId/payments', asyncHandler(paymentsController.listPaymentsForOrder));
 
 module.exports = router;

@@ -7,6 +7,7 @@ const batchesRouter = require('./routes/batches.routes');
 const qualityLogsRouter = require('./routes/qualityLogs.routes');
 const anomalyDetectionRouter = require('./routes/anomalyDetection.routes');
 const salesForecastRouter = require('./routes/salesForecast.routes');
+const paymentsRouter = require('./routes/payments.routes');
 const { authenticateJWT } = require('./middleware/auth');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -40,6 +41,7 @@ app.use('/api/quality-logs', authenticateJWT, qualityLogsRouter);
 // two different sub-paths, so it's mounted at the bare /api prefix.
 app.use('/api', authenticateJWT, anomalyDetectionRouter);
 app.use('/api/sales-forecast', authenticateJWT, salesForecastRouter);
+app.use('/api/payments', authenticateJWT, paymentsRouter);
 
 // 404 handler for anything that didn't match a route above.
 app.use((req, res) => {
