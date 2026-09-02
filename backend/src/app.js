@@ -4,6 +4,7 @@ const cors = require('cors');
 const ordersRouter = require('./routes/orders.routes');
 const batchesRouter = require('./routes/batches.routes');
 const qualityLogsRouter = require('./routes/qualityLogs.routes');
+const anomalyDetectionRouter = require('./routes/anomalyDetection.routes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -27,6 +28,9 @@ app.get('/health', (req, res) => {
 app.use('/api/orders', ordersRouter);
 app.use('/api/batches', batchesRouter);
 app.use('/api/quality-logs', qualityLogsRouter);
+// Handles POST /api/anomaly-detection/run and GET /api/anomaly-flags —
+// two different sub-paths, so it's mounted at the bare /api prefix.
+app.use('/api', anomalyDetectionRouter);
 
 // 404 handler for anything that didn't match a route above.
 app.use((req, res) => {
