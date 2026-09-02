@@ -1,44 +1,9 @@
-const path = require('path');
-const fs = require('fs');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
 const db = require('../config/db');
-const AppError = require('../utils/AppError');
-
-const execFileAsync = promisify(execFile);
-
-// backend/src/controllers -> up 3 levels -> project root -> ml/
-const ML_DIR = path.join(__dirname, '..', '..', '..', 'ml');
-const SCRIPT_PATH = path.join(ML_DIR, 'anomaly_detection.py');
-
-// Picks whichever venv layout actually exists (Windows vs. Mac/Linux use
-// different folder names inside a venv) so this works for every teammate
-// regardless of OS, falling back to a bare 'python3' on PATH as a last
-// resort if no venv was ever created.
-function resolvePythonPath() {
-  const windowsVenvPython = path.join(ML_DIR, '.venv', 'Scripts', 'python.exe');
-  const posixVenvPython = path.join(ML_DIR, '.venv', 'bin', 'python');
-  if (fs.existsSync(windowsVenvPython)) return windowsVenvPython;
-  if (fs.existsSync(posixVenvPython)) return posixVenvPython;
-  return 'python3';
-}
+const { runMlScript } = require('../utils/mlRunner');
 
 // POST /api/anomaly-detection/run
-// Runs the Python z-score script as a one-off child process rather than
-// standing up a separate always-running ML service — simpler to operate
-// for a college mini-project (one server to start, not two), and the
-// script only takes a couple seconds to run against this dataset size.
-// Sales Forecasting (Phase 4) may outgrow this pattern since the app
-// needs to *query* forecasts interactively, not just trigger a batch job.
 async function runAnomalyDetection(req, res) {
-  const pythonPath = resolvePythonPath();
-
-  let stdout;
-  try {
-    ({ stdout } = await execFileAsync(pythonPath, [SCRIPT_PATH], { cwd: ML_DIR }));
-  } catch (err) {
-    throw new AppError(500, `Anomaly detection script failed: ${err.stderr || err.message}`);
-  }
+  const scriptOutput = await runMlScript('anomaly_detection.py');
 
   const summary = await db.query(
     `SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE is_outlier) AS outliers
@@ -49,7 +14,7 @@ async function runAnomalyDetection(req, res) {
     message: 'Anomaly detection run complete.',
     total_flags: Number(summary.rows[0].total),
     outliers: Number(summary.rows[0].outliers),
-    script_output: stdout.trim(),
+    script_output: scriptOutput,
   });
 }
 
