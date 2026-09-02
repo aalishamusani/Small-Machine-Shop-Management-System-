@@ -14,7 +14,11 @@ data class Order(
                                  // so money values never pick up floating-point rounding error
     val status: String,
     val created_at: String,
-    val batches: List<Batch> = emptyList() // only populated by GET /api/orders/{id}
+    // batches/payments/account_summary are only populated by
+    // GET /api/orders/{id} (the list endpoint omits them to stay light).
+    val batches: List<Batch> = emptyList(),
+    val payments: List<Payment> = emptyList(),
+    val account_summary: AccountSummary? = null
 )
 
 // Request body for POST /api/orders. rate is optional — when present the

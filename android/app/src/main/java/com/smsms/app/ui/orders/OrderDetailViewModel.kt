@@ -88,6 +88,28 @@ class OrderDetailViewModel(private val orderId: Int) : ViewModel() {
             }
         }
     }
+
+    fun recordPayment(amount: Double, status: String?) {
+        val current = _uiState.value as? OrderDetailUiState.Loaded ?: return
+        viewModelScope.launch {
+            _uiState.value = current.copy(actionInProgress = true, actionError = null)
+            when (val result = OrdersRepository.createPayment(orderId, amount, status)) {
+                is ApiResult.Success -> loadOrder()
+                is ApiResult.Failure -> _uiState.value = current.copy(actionInProgress = false, actionError = result.message)
+            }
+        }
+    }
+
+    fun advancePaymentStatus(paymentId: Int, nextStatus: String) {
+        val current = _uiState.value as? OrderDetailUiState.Loaded ?: return
+        viewModelScope.launch {
+            _uiState.value = current.copy(actionInProgress = true, actionError = null)
+            when (val result = OrdersRepository.updatePaymentStatus(paymentId, nextStatus)) {
+                is ApiResult.Success -> loadOrder()
+                is ApiResult.Failure -> _uiState.value = current.copy(actionInProgress = false, actionError = result.message)
+            }
+        }
+    }
 }
 
 // Compose's default viewModel() factory only knows how to build

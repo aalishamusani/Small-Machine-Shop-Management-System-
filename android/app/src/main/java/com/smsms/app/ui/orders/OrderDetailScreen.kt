@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -41,8 +42,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.smsms.app.auth.AuthManager
+import com.smsms.app.model.AccountSummary
 import com.smsms.app.model.Batch
 import com.smsms.app.model.Order
+import com.smsms.app.model.Payment
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +58,7 @@ fun OrderDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showAddBatchDialog by remember { mutableStateOf(false) }
     var qualityLogDialogBatch by remember { mutableStateOf<Batch?>(null) }
+    var showRecordPaymentDialog by remember { mutableStateOf(false) }
 
     val session by AuthManager.session.collectAsState()
     val role = session?.user?.role
@@ -90,62 +95,95 @@ fun OrderDetailScreen(
                     )
 
                 is OrderDetailUiState.Loaded -> {
-                    Column(
+                    LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(16.dp)
                     ) {
-                        OrderSummary(state.order)
-                        Spacer(Modifier.height(16.dp))
+                        item {
+                            OrderSummary(state.order)
+                            Spacer(Modifier.height(16.dp))
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Batches", style = MaterialTheme.typography.titleMedium)
-                            if (canManageProduction) {
-                                TextButton(
-                                    onClick = { showAddBatchDialog = true },
-                                    enabled = state.order.status == "active" && !state.actionInProgress
-                                ) { Text("+ Add batch") }
-                            }
-                        }
-
-                        if (state.order.batches.isEmpty()) {
-                            Text("No batches yet.", modifier = Modifier.padding(vertical = 8.dp))
-                        } else {
-                            LazyColumn(modifier = Modifier.weight(1f)) {
-                                items(state.order.batches) { batch ->
-                                    BatchRow(
-                                        batch = batch,
-                                        enabled = !state.actionInProgress,
-                                        canAdvance = canManageProduction,
-                                        canLogQuality = canLogQuality,
-                                        onAdvance = { next -> viewModel.advanceBatch(batch.batch_id, next) },
-                                        onLogQuality = { qualityLogDialogBatch = batch }
-                                    )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Batches", style = MaterialTheme.typography.titleMedium)
+                                if (canManageProduction) {
+                                    TextButton(
+                                        onClick = { showAddBatchDialog = true },
+                                        enabled = state.order.status == "active" && !state.actionInProgress
+                                    ) { Text("+ Add batch") }
                                 }
                             }
                         }
 
-                        state.actionError?.let { message ->
-                            Spacer(Modifier.height(8.dp))
-                            Text(message, color = MaterialTheme.colorScheme.error)
+                        if (state.order.batches.isEmpty()) {
+                            item { Text("No batches yet.", modifier = Modifier.padding(vertical = 8.dp)) }
+                        } else {
+                            items(state.order.batches) { batch ->
+                                BatchRow(
+                                    batch = batch,
+                                    enabled = !state.actionInProgress,
+                                    canAdvance = canManageProduction,
+                                    canLogQuality = canLogQuality,
+                                    onAdvance = { next -> viewModel.advanceBatch(batch.batch_id, next) },
+                                    onLogQuality = { qualityLogDialogBatch = batch }
+                                )
+                            }
                         }
 
-                        if (canManageProduction) {
-                            Spacer(Modifier.height(16.dp))
-                            // Closing is deliberately allowed to fail server-
-                            // side (e.g. "2 batch(es) not completed yet")
-                            // rather than us trying to perfectly replicate
-                            // that rule here — the server is the one source
-                            // of truth for it.
-                            Button(
-                                onClick = { viewModel.closeOrder() },
-                                enabled = state.order.status == "active" && !state.actionInProgress,
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("Close order") }
+                        item {
+                            Spacer(Modifier.height(24.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Accounts", style = MaterialTheme.typography.titleMedium)
+                                if (canManageProduction) {
+                                    TextButton(
+                                        onClick = { showRecordPaymentDialog = true },
+                                        enabled = !state.actionInProgress
+                                    ) { Text("+ Record payment") }
+                                }
+                            }
+                            state.order.account_summary?.let { AccountSummaryCard(it) }
+                        }
+
+                        if (state.order.payments.isEmpty()) {
+                            item { Text("No payments recorded yet.", modifier = Modifier.padding(vertical = 8.dp)) }
+                        } else {
+                            items(state.order.payments) { payment ->
+                                PaymentRow(
+                                    payment = payment,
+                                    enabled = !state.actionInProgress,
+                                    canAdvance = canManageProduction,
+                                    onAdvance = { next -> viewModel.advancePaymentStatus(payment.payment_id, next) }
+                                )
+                            }
+                        }
+
+                        item {
+                            state.actionError?.let { message ->
+                                Spacer(Modifier.height(8.dp))
+                                Text(message, color = MaterialTheme.colorScheme.error)
+                            }
+
+                            if (canManageProduction) {
+                                Spacer(Modifier.height(16.dp))
+                                // Closing is deliberately allowed to fail
+                                // server-side (e.g. "2 batch(es) not
+                                // completed yet") rather than us trying to
+                                // perfectly replicate that rule here — the
+                                // server is the one source of truth for it.
+                                Button(
+                                    onClick = { viewModel.closeOrder() },
+                                    enabled = state.order.status == "active" && !state.actionInProgress,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text("Close order") }
+                            }
                         }
                     }
 
@@ -166,6 +204,16 @@ fun OrderDetailScreen(
                             onConfirm = { qtyChecked, defectCount ->
                                 qualityLogDialogBatch = null
                                 viewModel.logQualityCheck(batch.batch_id, qtyChecked, defectCount)
+                            }
+                        )
+                    }
+
+                    if (showRecordPaymentDialog) {
+                        RecordPaymentDialog(
+                            onDismiss = { showRecordPaymentDialog = false },
+                            onConfirm = { amount, status ->
+                                showRecordPaymentDialog = false
+                                viewModel.recordPayment(amount, status)
                             }
                         )
                     }
@@ -236,6 +284,95 @@ private fun BatchRow(
     )
     HorizontalDivider()
 }
+
+@Composable
+private fun AccountSummaryCard(summary: AccountSummary) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text("Total: ${formatCurrency(summary.total_amount?.toDoubleOrNull())}")
+            Text("Paid: ${formatCurrency(summary.total_paid)}")
+            Text(
+                "Due: ${formatCurrency(summary.amount_due)}",
+                style = MaterialTheme.typography.titleSmall
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PaymentRow(payment: Payment, enabled: Boolean, canAdvance: Boolean, onAdvance: (String) -> Unit) {
+    // Forward-only, mirroring ALLOWED_TRANSITIONS in the backend's
+    // payments.controller.js — 'paid' has no next step.
+    val nextStatus = when (payment.status) {
+        "pending" -> "partial"
+        "partial" -> "paid"
+        else -> null
+    }
+    ListItem(
+        headlineContent = { Text(formatCurrency(payment.amount.toDoubleOrNull())) },
+        supportingContent = { Text("${payment.payment_date} · ${payment.status}") },
+        trailingContent = {
+            if (canAdvance && nextStatus != null) {
+                TextButton(onClick = { onAdvance(nextStatus) }, enabled = enabled) {
+                    Text(if (nextStatus == "partial") "Mark partial" else "Mark paid")
+                }
+            }
+        }
+    )
+    HorizontalDivider()
+}
+
+@Composable
+private fun RecordPaymentDialog(onDismiss: () -> Unit, onConfirm: (amount: Double, status: String?) -> Unit) {
+    var amountText by remember { mutableStateOf("") }
+    var markAsPaid by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Record payment") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = { Text("Amount") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = markAsPaid, onCheckedChange = { markAsPaid = it })
+                    Text("Already received (mark as paid)")
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Leave unchecked to record it as pending, e.g. an expected but not-yet-received payment.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                amountText.toDoubleOrNull()?.let { amount ->
+                    onConfirm(amount, if (markAsPaid) "paid" else null)
+                }
+            }) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+private fun formatCurrency(value: Double?): String =
+    if (value == null) "—" else "₹" + String.format(Locale.US, "%,.2f", value)
 
 @Composable
 private fun AddBatchDialog(onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
