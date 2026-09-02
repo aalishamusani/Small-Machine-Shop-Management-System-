@@ -76,14 +76,13 @@ class OrderDetailViewModel(private val orderId: Int) : ViewModel() {
         }
     }
 
-    // loggedByUserId is a manually-entered quality_head user_id for now —
-    // a stand-in until Phase 5 auth exists and this can just be read off
-    // the logged-in user automatically instead of typed in.
-    fun logQualityCheck(batchId: Int, loggedByUserId: Int, qtyChecked: Int, defectCount: Int) {
+    // No user_id parameter here — the backend reads who's logging the
+    // check off the caller's JWT, not anything the client sends.
+    fun logQualityCheck(batchId: Int, qtyChecked: Int, defectCount: Int) {
         val current = _uiState.value as? OrderDetailUiState.Loaded ?: return
         viewModelScope.launch {
             _uiState.value = current.copy(actionInProgress = true, actionError = null)
-            when (val result = OrdersRepository.createQualityLog(batchId, loggedByUserId, qtyChecked, defectCount)) {
+            when (val result = OrdersRepository.createQualityLog(batchId, qtyChecked, defectCount)) {
                 is ApiResult.Success -> loadOrder()
                 is ApiResult.Failure -> _uiState.value = current.copy(actionInProgress = false, actionError = result.message)
             }

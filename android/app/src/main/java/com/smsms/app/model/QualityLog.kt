@@ -11,10 +11,10 @@ data class QualityLog(
     val created_at: String
 )
 
-// Note: no pass_fail field here — the backend computes it from
-// defect_count and would ignore one sent from the client anyway.
+// No pass_fail (backend derives it from defect_count) and no logged_by
+// (backend reads that off the caller's verified JWT, not the request
+// body — see backend qualityLogs.controller.js).
 data class CreateQualityLogRequest(
-    val logged_by: Int,
     val qty_checked: Int,
     val defect_count: Int
 )

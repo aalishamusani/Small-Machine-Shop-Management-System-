@@ -1,6 +1,7 @@
 package com.smsms.app.network
 
 import com.smsms.app.BuildConfig
+import com.smsms.app.auth.AuthInterceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -19,6 +20,9 @@ object ApiClient {
     }
 
     private val okHttpClient = OkHttpClient.Builder()
+        // Order matters: auth header gets added first, then the (larger)
+        // logging interceptor logs the fully-built request including it.
+        .addInterceptor(AuthInterceptor())
         .addInterceptor(loggingInterceptor)
         .build()
 

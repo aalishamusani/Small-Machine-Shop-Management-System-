@@ -26,11 +26,15 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.smsms.app.auth.AuthManager
 import com.smsms.app.model.Order
+import com.smsms.app.repository.AuthRepository
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,19 +45,43 @@ fun OrderListScreen(
     viewModel: OrderListViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val session by AuthManager.session.collectAsState()
+    val role = session?.user?.role
+    val coroutineScope = rememberCoroutineScope()
+
+    // These mirror the server-side role checks in the backend routers —
+    // hiding a button a role can't use isn't the actual security (the
+    // server enforces that regardless), it's just not offering an action
+    // that would only come back as a 403.
+    val canCreateOrders = role == "production_head" || role == "plant_head"
+    val canSeeForecast = role == "plant_head"
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Orders") },
                 actions = {
-                    TextButton(onClick = onForecastClick) { Text("Forecast") }
+                    session?.user?.let { user ->
+                        Text(
+                            "${user.username} (${user.role})",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                    }
+                    if (canSeeForecast) {
+                        TextButton(onClick = onForecastClick) { Text("Forecast") }
+                    }
+                    TextButton(onClick = { coroutineScope.launch { AuthRepository.logout() } }) {
+                        Text("Log out")
+                    }
                 }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onCreateOrderClick) {
-                Icon(Icons.Default.Add, contentDescription = "Create order")
+            if (canCreateOrders) {
+                FloatingActionButton(onClick = onCreateOrderClick) {
+                    Icon(Icons.Default.Add, contentDescription = "Create order")
+                }
             }
         }
     ) { padding ->

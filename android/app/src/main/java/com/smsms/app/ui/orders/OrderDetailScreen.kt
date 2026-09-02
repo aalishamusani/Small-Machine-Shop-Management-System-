@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.smsms.app.auth.AuthManager
 import com.smsms.app.model.Batch
 import com.smsms.app.model.Order
 
@@ -53,6 +54,11 @@ fun OrderDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showAddBatchDialog by remember { mutableStateOf(false) }
     var qualityLogDialogBatch by remember { mutableStateOf<Batch?>(null) }
+
+    val session by AuthManager.session.collectAsState()
+    val role = session?.user?.role
+    val canManageProduction = role == "production_head" || role == "plant_head"
+    val canLogQuality = role == "quality_head" || role == "plant_head"
 
     Scaffold(
         topBar = {
@@ -98,10 +104,12 @@ fun OrderDetailScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text("Batches", style = MaterialTheme.typography.titleMedium)
-                            TextButton(
-                                onClick = { showAddBatchDialog = true },
-                                enabled = state.order.status == "active" && !state.actionInProgress
-                            ) { Text("+ Add batch") }
+                            if (canManageProduction) {
+                                TextButton(
+                                    onClick = { showAddBatchDialog = true },
+                                    enabled = state.order.status == "active" && !state.actionInProgress
+                                ) { Text("+ Add batch") }
+                            }
                         }
 
                         if (state.order.batches.isEmpty()) {
@@ -112,6 +120,8 @@ fun OrderDetailScreen(
                                     BatchRow(
                                         batch = batch,
                                         enabled = !state.actionInProgress,
+                                        canAdvance = canManageProduction,
+                                        canLogQuality = canLogQuality,
                                         onAdvance = { next -> viewModel.advanceBatch(batch.batch_id, next) },
                                         onLogQuality = { qualityLogDialogBatch = batch }
                                     )
@@ -124,16 +134,19 @@ fun OrderDetailScreen(
                             Text(message, color = MaterialTheme.colorScheme.error)
                         }
 
-                        Spacer(Modifier.height(16.dp))
-                        // Closing is deliberately allowed to fail server-side
-                        // (e.g. "2 batch(es) not completed yet") rather than
-                        // us trying to perfectly replicate that rule here —
-                        // the server is the one source of truth for it.
-                        Button(
-                            onClick = { viewModel.closeOrder() },
-                            enabled = state.order.status == "active" && !state.actionInProgress,
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("Close order") }
+                        if (canManageProduction) {
+                            Spacer(Modifier.height(16.dp))
+                            // Closing is deliberately allowed to fail server-
+                            // side (e.g. "2 batch(es) not completed yet")
+                            // rather than us trying to perfectly replicate
+                            // that rule here — the server is the one source
+                            // of truth for it.
+                            Button(
+                                onClick = { viewModel.closeOrder() },
+                                enabled = state.order.status == "active" && !state.actionInProgress,
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Close order") }
+                        }
                     }
 
                     if (showAddBatchDialog) {
@@ -150,9 +163,9 @@ fun OrderDetailScreen(
                         LogQualityCheckDialog(
                             batch = batch,
                             onDismiss = { qualityLogDialogBatch = null },
-                            onConfirm = { loggedBy, qtyChecked, defectCount ->
+                            onConfirm = { qtyChecked, defectCount ->
                                 qualityLogDialogBatch = null
-                                viewModel.logQualityCheck(batch.batch_id, loggedBy, qtyChecked, defectCount)
+                                viewModel.logQualityCheck(batch.batch_id, qtyChecked, defectCount)
                             }
                         )
                     }
@@ -189,6 +202,8 @@ private fun OrderSummary(order: Order) {
 private fun BatchRow(
     batch: Batch,
     enabled: Boolean,
+    canAdvance: Boolean,
+    canLogQuality: Boolean,
     onAdvance: (String) -> Unit,
     onLogQuality: () -> Unit
 ) {
@@ -201,17 +216,17 @@ private fun BatchRow(
     }
     // Mirrors the backend rule: a batch that hasn't started production
     // (still "pending") has nothing to inspect yet.
-    val canLogQuality = batch.status != "pending"
+    val batchIsInspectable = batch.status != "pending"
 
     ListItem(
         headlineContent = { Text("Batch #${batch.batch_id} — qty ${batch.quantity}") },
         supportingContent = { Text("Status: ${batch.status}") },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (canLogQuality) {
+                if (canLogQuality && batchIsInspectable) {
                     TextButton(onClick = onLogQuality, enabled = enabled) { Text("Log QC") }
                 }
-                if (nextStatus != null) {
+                if (canAdvance && nextStatus != null) {
                     TextButton(onClick = { onAdvance(nextStatus) }, enabled = enabled) {
                         Text(if (nextStatus == "in_progress") "Start" else "Complete")
                     }
@@ -244,17 +259,14 @@ private fun AddBatchDialog(onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
     )
 }
 
-// loggedBy is a manually-typed quality_head user_id for now — there's no
-// login yet (Phase 5), so there's no "current user" to fill this in
-// automatically. Once real auth exists, this field goes away entirely and
-// the backend call just uses the logged-in user's id.
+// No "who is logging this" field — the backend identifies the caller
+// from their login token, not from anything typed into this form.
 @Composable
 private fun LogQualityCheckDialog(
     batch: Batch,
     onDismiss: () -> Unit,
-    onConfirm: (loggedBy: Int, qtyChecked: Int, defectCount: Int) -> Unit
+    onConfirm: (qtyChecked: Int, defectCount: Int) -> Unit
 ) {
-    var loggedByText by remember { mutableStateOf("") }
     var qtyCheckedText by remember { mutableStateOf("") }
     var defectCountText by remember { mutableStateOf("0") }
 
@@ -263,14 +275,6 @@ private fun LogQualityCheckDialog(
         title = { Text("Log quality check — Batch #${batch.batch_id}") },
         text = {
             Column {
-                OutlinedTextField(
-                    value = loggedByText,
-                    onValueChange = { loggedByText = it },
-                    label = { Text("Quality head user_id") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = qtyCheckedText,
                     onValueChange = { qtyCheckedText = it },
@@ -295,11 +299,10 @@ private fun LogQualityCheckDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val loggedBy = loggedByText.toIntOrNull()
                 val qtyChecked = qtyCheckedText.toIntOrNull()
                 val defectCount = defectCountText.toIntOrNull()
-                if (loggedBy != null && qtyChecked != null && defectCount != null) {
-                    onConfirm(loggedBy, qtyChecked, defectCount)
+                if (qtyChecked != null && defectCount != null) {
+                    onConfirm(qtyChecked, defectCount)
                 }
             }) { Text("Submit") }
         },

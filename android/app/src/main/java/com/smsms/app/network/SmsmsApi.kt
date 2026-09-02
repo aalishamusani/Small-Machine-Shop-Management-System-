@@ -4,12 +4,16 @@ import com.smsms.app.model.Batch
 import com.smsms.app.model.CreateBatchRequest
 import com.smsms.app.model.CreateOrderRequest
 import com.smsms.app.model.CreateQualityLogRequest
+import com.smsms.app.model.LoginRequest
+import com.smsms.app.model.LoginResponse
 import com.smsms.app.model.Order
 import com.smsms.app.model.QualityLog
+import com.smsms.app.model.RegisterRequest
 import com.smsms.app.model.SalesForecast
 import com.smsms.app.model.SalesForecastRunResponse
 import com.smsms.app.model.UpdateBatchStatusRequest
 import com.smsms.app.model.UpdateOrderRequest
+import com.smsms.app.model.UserSummary
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -22,6 +26,12 @@ import retrofit2.http.Query
 // call implementation from these annotations at runtime — this interface
 // is never implemented by hand.
 interface SmsmsApi {
+
+    @POST("api/auth/login")
+    suspend fun login(@Body body: LoginRequest): Response<LoginResponse>
+
+    @POST("api/auth/register")
+    suspend fun register(@Body body: RegisterRequest): Response<UserSummary>
 
     @POST("api/orders")
     suspend fun createOrder(@Body body: CreateOrderRequest): Response<Order>
