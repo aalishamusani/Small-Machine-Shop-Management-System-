@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -36,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.smsms.app.model.Batch
@@ -50,6 +52,7 @@ fun OrderDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showAddBatchDialog by remember { mutableStateOf(false) }
+    var qualityLogDialogBatch by remember { mutableStateOf<Batch?>(null) }
 
     Scaffold(
         topBar = {
@@ -109,7 +112,8 @@ fun OrderDetailScreen(
                                     BatchRow(
                                         batch = batch,
                                         enabled = !state.actionInProgress,
-                                        onAdvance = { next -> viewModel.advanceBatch(batch.batch_id, next) }
+                                        onAdvance = { next -> viewModel.advanceBatch(batch.batch_id, next) },
+                                        onLogQuality = { qualityLogDialogBatch = batch }
                                     )
                                 }
                             }
@@ -138,6 +142,17 @@ fun OrderDetailScreen(
                             onConfirm = { qty ->
                                 showAddBatchDialog = false
                                 viewModel.addBatch(qty)
+                            }
+                        )
+                    }
+
+                    qualityLogDialogBatch?.let { batch ->
+                        LogQualityCheckDialog(
+                            batch = batch,
+                            onDismiss = { qualityLogDialogBatch = null },
+                            onConfirm = { loggedBy, qtyChecked, defectCount ->
+                                qualityLogDialogBatch = null
+                                viewModel.logQualityCheck(batch.batch_id, loggedBy, qtyChecked, defectCount)
                             }
                         )
                     }
@@ -171,7 +186,12 @@ private fun OrderSummary(order: Order) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BatchRow(batch: Batch, enabled: Boolean, onAdvance: (String) -> Unit) {
+private fun BatchRow(
+    batch: Batch,
+    enabled: Boolean,
+    onAdvance: (String) -> Unit,
+    onLogQuality: () -> Unit
+) {
     // Forward-only progression, mirroring ALLOWED_TRANSITIONS in the
     // backend's batches.controller.js — "completed" has no next step.
     val nextStatus = when (batch.status) {
@@ -179,13 +199,22 @@ private fun BatchRow(batch: Batch, enabled: Boolean, onAdvance: (String) -> Unit
         "in_progress" -> "completed"
         else -> null
     }
+    // Mirrors the backend rule: a batch that hasn't started production
+    // (still "pending") has nothing to inspect yet.
+    val canLogQuality = batch.status != "pending"
+
     ListItem(
         headlineContent = { Text("Batch #${batch.batch_id} — qty ${batch.quantity}") },
         supportingContent = { Text("Status: ${batch.status}") },
         trailingContent = {
-            if (nextStatus != null) {
-                TextButton(onClick = { onAdvance(nextStatus) }, enabled = enabled) {
-                    Text(if (nextStatus == "in_progress") "Start" else "Complete")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (canLogQuality) {
+                    TextButton(onClick = onLogQuality, enabled = enabled) { Text("Log QC") }
+                }
+                if (nextStatus != null) {
+                    TextButton(onClick = { onAdvance(nextStatus) }, enabled = enabled) {
+                        Text(if (nextStatus == "in_progress") "Start" else "Complete")
+                    }
                 }
             }
         }
@@ -208,6 +237,71 @@ private fun AddBatchDialog(onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = { qtyText.toIntOrNull()?.let(onConfirm) }) { Text("Add") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+// loggedBy is a manually-typed quality_head user_id for now — there's no
+// login yet (Phase 5), so there's no "current user" to fill this in
+// automatically. Once real auth exists, this field goes away entirely and
+// the backend call just uses the logged-in user's id.
+@Composable
+private fun LogQualityCheckDialog(
+    batch: Batch,
+    onDismiss: () -> Unit,
+    onConfirm: (loggedBy: Int, qtyChecked: Int, defectCount: Int) -> Unit
+) {
+    var loggedByText by remember { mutableStateOf("") }
+    var qtyCheckedText by remember { mutableStateOf("") }
+    var defectCountText by remember { mutableStateOf("0") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Log quality check — Batch #${batch.batch_id}") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = loggedByText,
+                    onValueChange = { loggedByText = it },
+                    label = { Text("Quality head user_id") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = qtyCheckedText,
+                    onValueChange = { qtyCheckedText = it },
+                    label = { Text("Quantity checked (max ${batch.quantity})") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = defectCountText,
+                    onValueChange = { defectCountText = it },
+                    label = { Text("Defect count") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Pass/fail is decided automatically: 0 defects = pass, any defects = fail.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val loggedBy = loggedByText.toIntOrNull()
+                val qtyChecked = qtyCheckedText.toIntOrNull()
+                val defectCount = defectCountText.toIntOrNull()
+                if (loggedBy != null && qtyChecked != null && defectCount != null) {
+                    onConfirm(loggedBy, qtyChecked, defectCount)
+                }
+            }) { Text("Submit") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

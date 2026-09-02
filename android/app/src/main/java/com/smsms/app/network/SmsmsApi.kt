@@ -3,7 +3,9 @@ package com.smsms.app.network
 import com.smsms.app.model.Batch
 import com.smsms.app.model.CreateBatchRequest
 import com.smsms.app.model.CreateOrderRequest
+import com.smsms.app.model.CreateQualityLogRequest
 import com.smsms.app.model.Order
+import com.smsms.app.model.QualityLog
 import com.smsms.app.model.UpdateBatchStatusRequest
 import com.smsms.app.model.UpdateOrderRequest
 import retrofit2.Response
@@ -45,4 +47,10 @@ interface SmsmsApi {
 
     @PATCH("api/batches/{batchId}/status")
     suspend fun updateBatchStatus(@Path("batchId") batchId: Int, @Body body: UpdateBatchStatusRequest): Response<Batch>
+
+    @POST("api/batches/{batchId}/quality-logs")
+    suspend fun createQualityLog(@Path("batchId") batchId: Int, @Body body: CreateQualityLogRequest): Response<QualityLog>
+
+    @GET("api/batches/{batchId}/quality-logs")
+    suspend fun listQualityLogs(@Path("batchId") batchId: Int): Response<List<QualityLog>>
 }

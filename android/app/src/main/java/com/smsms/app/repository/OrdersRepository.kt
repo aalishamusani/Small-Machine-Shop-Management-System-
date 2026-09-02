@@ -5,7 +5,9 @@ import com.smsms.app.model.ApiErrorResponse
 import com.smsms.app.model.Batch
 import com.smsms.app.model.CreateBatchRequest
 import com.smsms.app.model.CreateOrderRequest
+import com.smsms.app.model.CreateQualityLogRequest
 import com.smsms.app.model.Order
+import com.smsms.app.model.QualityLog
 import com.smsms.app.model.UpdateBatchStatusRequest
 import com.smsms.app.network.ApiClient
 import com.smsms.app.util.ApiResult
@@ -59,4 +61,10 @@ object OrdersRepository {
 
     suspend fun updateBatchStatus(batchId: Int, status: String): ApiResult<Batch> =
         safeCall { api.updateBatchStatus(batchId, UpdateBatchStatusRequest(status)) }
+
+    suspend fun createQualityLog(batchId: Int, loggedBy: Int, qtyChecked: Int, defectCount: Int): ApiResult<QualityLog> =
+        safeCall { api.createQualityLog(batchId, CreateQualityLogRequest(loggedBy, qtyChecked, defectCount)) }
+
+    suspend fun listQualityLogs(batchId: Int): ApiResult<List<QualityLog>> =
+        safeCall { api.listQualityLogs(batchId) }
 }
