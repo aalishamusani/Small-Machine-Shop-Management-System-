@@ -1,11 +1,13 @@
 const express = require('express');
 const cors = require('cors');
 
+const authRouter = require('./routes/auth.routes');
 const ordersRouter = require('./routes/orders.routes');
 const batchesRouter = require('./routes/batches.routes');
 const qualityLogsRouter = require('./routes/qualityLogs.routes');
 const anomalyDetectionRouter = require('./routes/anomalyDetection.routes');
 const salesForecastRouter = require('./routes/salesForecast.routes');
+const { authenticateJWT } = require('./middleware/auth');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -26,13 +28,18 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.use('/api/orders', ordersRouter);
-app.use('/api/batches', batchesRouter);
-app.use('/api/quality-logs', qualityLogsRouter);
+// /api/auth/login is public (see auth.routes.js); everything else below
+// requires a valid token. authenticateJWT is applied per-mount here
+// rather than once globally so it's obvious at a glance, from this one
+// file, exactly which routers are protected.
+app.use('/api/auth', authRouter);
+app.use('/api/orders', authenticateJWT, ordersRouter);
+app.use('/api/batches', authenticateJWT, batchesRouter);
+app.use('/api/quality-logs', authenticateJWT, qualityLogsRouter);
 // Handles POST /api/anomaly-detection/run and GET /api/anomaly-flags —
 // two different sub-paths, so it's mounted at the bare /api prefix.
-app.use('/api', anomalyDetectionRouter);
-app.use('/api/sales-forecast', salesForecastRouter);
+app.use('/api', authenticateJWT, anomalyDetectionRouter);
+app.use('/api/sales-forecast', authenticateJWT, salesForecastRouter);
 
 // 404 handler for anything that didn't match a route above.
 app.use((req, res) => {

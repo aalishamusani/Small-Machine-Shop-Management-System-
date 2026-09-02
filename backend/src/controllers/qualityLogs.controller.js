@@ -6,31 +6,27 @@ const isNonNegativeInt = (v) => Number.isInteger(v) && v >= 0;
 const isPositiveInt = (v) => Number.isInteger(v) && v > 0;
 
 // POST /api/batches/:batchId/quality-logs
-// Records an inspection result for a batch. Two design decisions worth
-// explaining:
+// Records an inspection result for a batch.
 //
-// 1. pass_fail is NEVER accepted from the client — it's always computed
-//    here from defect_count (0 defects = pass, any defects = fail). Same
-//    principle as total_amount in orders.controller.js: a value that can
-//    be derived from other stored data shouldn't also be hand-entered,
-//    because the two copies can then disagree (e.g. someone logging
-//    3 defects but clicking "pass"). Real factories often use a defect
-//    *rate* threshold instead of "zero tolerance" — that's a natural
-//    extension for Phase 3 (Anomaly Detection), not this phase.
+// pass_fail is NEVER accepted from the client — it's always computed here
+// from defect_count (0 defects = pass, any defects = fail). Same
+// principle as total_amount in orders.controller.js: a value that can be
+// derived from other stored data shouldn't also be hand-entered, because
+// the two copies can then disagree (e.g. someone logging 3 defects but
+// clicking "pass").
 //
-// 2. logged_by is a plain user_id in the request body, which is NOT
-//    secure — anything sent by the client can be forged. This is a
-//    known, temporary gap: real auth (Phase 5) will replace this with
-//    the user_id read off a verified JWT, so a client can't claim to be
-//    someone else. Until then we at least verify the id refers to a real
-//    quality_head account, not just any integer.
+// logged_by is read from req.user (set by authenticateJWT), NOT from the
+// request body. Before Phase 5 auth existed, this had to be a client-
+// supplied user_id — trusted, but forgeable by anything sent over the
+// wire. Now identity comes from a verified token signature instead, so
+// a client genuinely cannot claim to be someone else. The route-level
+// requireRole('quality_head', 'plant_head') in batches.routes.js is what
+// guarantees req.user is actually allowed to log a quality check at all.
 async function createQualityLog(req, res) {
   const { batchId } = req.params;
-  const { logged_by, qty_checked, defect_count, check_date } = req.body;
+  const { qty_checked, defect_count, check_date } = req.body;
+  const logged_by = req.user.user_id;
 
-  if (!isPositiveInt(logged_by)) {
-    throw new AppError(400, 'logged_by is required and must be a positive integer (user_id).');
-  }
   if (!isPositiveInt(qty_checked)) {
     throw new AppError(400, 'qty_checked is required and must be a positive integer.');
   }
@@ -58,14 +54,6 @@ async function createQualityLog(req, res) {
   }
   if (qty_checked > batch.quantity) {
     throw new AppError(400, `qty_checked (${qty_checked}) cannot exceed the batch quantity (${batch.quantity}).`);
-  }
-
-  const userResult = await db.query('SELECT * FROM users WHERE user_id = $1', [logged_by]);
-  if (userResult.rows.length === 0) {
-    throw new AppError(400, 'logged_by does not refer to an existing user.');
-  }
-  if (userResult.rows[0].role !== 'quality_head') {
-    throw new AppError(400, 'logged_by must be a quality_head user.');
   }
 
   const pass_fail = defect_count === 0 ? 'pass' : 'fail';
