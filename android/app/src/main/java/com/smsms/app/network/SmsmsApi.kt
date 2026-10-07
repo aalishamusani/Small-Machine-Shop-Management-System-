@@ -69,6 +69,9 @@ interface SmsmsApi {
     @GET("api/batches/{batchId}/quality-logs")
     suspend fun listQualityLogs(@Path("batchId") batchId: Int): Response<List<QualityLog>>
 
+    // Spawns ml/train_forecast.py on the backend — a cold first run (loading
+    // pandas/statsmodels from disk) can take well over the default 10s.
+    @LongRunning(readTimeoutSeconds = 60)
     @POST("api/sales-forecast/run")
     suspend fun runSalesForecast(): Response<SalesForecastRunResponse>
 

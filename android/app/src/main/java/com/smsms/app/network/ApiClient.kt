@@ -23,6 +23,7 @@ object ApiClient {
         // Order matters: auth header gets added first, then the (larger)
         // logging interceptor logs the fully-built request including it.
         .addInterceptor(AuthInterceptor())
+        .addInterceptor(LongRunningTimeoutInterceptor())
         .addInterceptor(loggingInterceptor)
         .build()
 
