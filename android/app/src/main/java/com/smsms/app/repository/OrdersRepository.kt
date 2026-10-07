@@ -1,6 +1,9 @@
 package com.smsms.app.repository
 
+import com.smsms.app.model.ActualsStatus
+import com.smsms.app.model.AddActualRequest
 import com.smsms.app.model.Batch
+import com.smsms.app.model.EnteredMonth
 import com.smsms.app.model.CreateBatchRequest
 import com.smsms.app.model.CreateOrderRequest
 import com.smsms.app.model.CreatePaymentRequest
@@ -45,6 +48,12 @@ object OrdersRepository {
 
     suspend fun listSalesForecast(): ApiResult<List<SalesForecast>> =
         safeApiCall { api.listSalesForecast() }
+
+    suspend fun getActualsStatus(): ApiResult<ActualsStatus> =
+        safeApiCall { api.getActualsStatus() }
+
+    suspend fun addActual(month: String, amount: Double): ApiResult<EnteredMonth> =
+        safeApiCall { api.addActual(AddActualRequest(month, amount)) }
 
     suspend fun createPayment(orderId: Int, amount: Double, status: String?): ApiResult<Payment> =
         safeApiCall { api.createPayment(orderId, CreatePaymentRequest(amount, status)) }

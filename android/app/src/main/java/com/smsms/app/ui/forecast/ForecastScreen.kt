@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,12 +25,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -36,7 +44,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.smsms.app.model.SalesForecast
 import java.util.Locale
@@ -82,14 +94,36 @@ fun ForecastScreen(
                         Button(onClick = { viewModel.loadForecast() }) { Text("Retry") }
                     }
 
-                is ForecastUiState.Loaded -> ForecastContent(state, onRunForecast = { viewModel.runForecast() })
+                is ForecastUiState.Loaded -> ForecastContent(
+                    state,
+                    onRunForecast = { viewModel.runForecast() },
+                    onAddActualClick = { viewModel.openAddActual() },
+                    onAddActualDismiss = { viewModel.dismissAddActual() },
+                    onAddActualSave = { amount -> viewModel.addActual(amount) }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ForecastContent(state: ForecastUiState.Loaded, onRunForecast: () -> Unit) {
+private fun ForecastContent(
+    state: ForecastUiState.Loaded,
+    onRunForecast: () -> Unit,
+    onAddActualClick: () -> Unit,
+    onAddActualDismiss: () -> Unit,
+    onAddActualSave: (Double) -> Unit
+) {
+    if (state.addActualOpen && state.nextMonth != null) {
+        AddActualDialog(
+            month = state.nextMonth,
+            saving = state.savingActual,
+            error = state.actualError,
+            onDismiss = onAddActualDismiss,
+            onSave = onAddActualSave
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         if (state.rows.isEmpty()) {
             Column(
@@ -119,7 +153,7 @@ private fun ForecastContent(state: ForecastUiState.Loaded, onRunForecast: () -> 
                     rows = state.rows,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
+                        .height(230.dp)
                 )
                 Spacer(Modifier.height(8.dp))
                 Legend()
@@ -138,6 +172,18 @@ private fun ForecastContent(state: ForecastUiState.Loaded, onRunForecast: () -> 
             )
         }
 
+        if (state.nextMonth != null) {
+            OutlinedButton(
+                onClick = onAddActualClick,
+                enabled = !state.running,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp)
+            ) {
+                Text("Add ${monthYear(state.nextMonth)} sales")
+            }
+        }
+
         Button(
             onClick = onRunForecast,
             enabled = !state.running,
@@ -154,32 +200,83 @@ private fun ForecastContent(state: ForecastUiState.Loaded, onRunForecast: () -> 
     }
 }
 
+// Asks for the real total sales of the next finished month. The month itself
+// is NOT editable: the server only accepts the next month in sequence (no
+// gaps), so the app just shows which month that is.
+@Composable
+private fun AddActualDialog(
+    month: String,
+    saving: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onSave: (Double) -> Unit
+) {
+    var amountText by rememberSaveable { mutableStateOf("") }
+    val amount = amountText.replace(",", "").trim().toDoubleOrNull()
+    val isValid = amount != null && amount > 0
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text("Add ${monthYear(month)} sales") },
+        text = {
+            Column {
+                Text("Enter the total value of everything dispatched in ${monthYear(month)}, in rupees.")
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = { Text("Total sales (₹)") },
+                    singleLine = true,
+                    enabled = !saving,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(amount!!) }, enabled = isValid && !saving) {
+                if (saving) CircularProgressIndicator(modifier = Modifier.height(18.dp)) else Text("Save & re-run forecast")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") }
+        }
+    )
+}
+
 @Composable
 private fun Legend() {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Row {
-            LegendSwatch(MaterialTheme.colorScheme.primary)
+            LegendSwatch(MaterialTheme.colorScheme.primary, dashed = false)
             Spacer(Modifier.width(4.dp))
             Text("Actual", style = MaterialTheme.typography.labelSmall)
         }
         Row {
-            LegendSwatch(MaterialTheme.colorScheme.tertiary)
+            LegendSwatch(MaterialTheme.colorScheme.tertiary, dashed = true)
             Spacer(Modifier.width(4.dp))
             Text("Predicted", style = MaterialTheme.typography.labelSmall)
         }
     }
 }
 
+// The swatch needs a FIXED width. Previously its Canvas used fillMaxWidth(),
+// so it stretched across the whole row and pushed the "Actual"/"Predicted"
+// text off screen. The predicted swatch is dashed to match the dashed line
+// it represents on the chart.
 @Composable
-private fun LegendSwatch(color: Color) {
-    Box(
-        modifier = Modifier
-            .height(10.dp)
-            .padding(top = 2.dp)
-    ) {
-        Canvas(modifier = Modifier.fillMaxWidth().height(10.dp)) {
-            drawLine(color, Offset(0f, size.height / 2), Offset(20.dp.toPx(), size.height / 2), strokeWidth = 3.dp.toPx())
-        }
+private fun LegendSwatch(color: Color, dashed: Boolean) {
+    Canvas(modifier = Modifier.width(20.dp).height(10.dp)) {
+        drawLine(
+            color,
+            Offset(0f, size.height / 2),
+            Offset(size.width, size.height / 2),
+            strokeWidth = 3.dp.toPx(),
+            pathEffect = if (dashed) PathEffect.dashPathEffect(floatArrayOf(8f, 5f)) else null
+        )
     }
 }
 
@@ -214,6 +311,7 @@ private fun ForecastChart(rows: List<SalesForecast>, modifier: Modifier = Modifi
     val actualColor = MaterialTheme.colorScheme.primary
     val predictedColor = MaterialTheme.colorScheme.tertiary
     val gridColor = MaterialTheme.colorScheme.outlineVariant
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
 
     val predictedValues = rows.map { it.predicted_value.toDouble() }
     val actualPoints = rows.mapIndexedNotNull { i, r -> r.actual_value?.let { i to it.toDouble() } }
@@ -225,17 +323,72 @@ private fun ForecastChart(rows: List<SalesForecast>, modifier: Modifier = Modifi
     Canvas(modifier = modifier) {
         val n = rows.size
 
-        fun xFor(index: Int): Float =
-            if (n <= 1) size.width / 2 else size.width * index / (n - 1)
+        // Margins reserved around the plot area: left for the value labels,
+        // bottom for the month labels, top for the "Forecast" tag. They also
+        // keep the edge dots from being cut off by the canvas boundary.
+        val leftMargin = 52.dp.toPx()
+        val rightMargin = 8.dp.toPx()
+        val topMargin = 14.dp.toPx()
+        val bottomMargin = 22.dp.toPx()
+        val plotWidth = size.width - leftMargin - rightMargin
+        val plotHeight = size.height - topMargin - bottomMargin
+
+        // Each point sits in the centre of its own equal-width column, so a
+        // month label drawn at the same x lines up exactly under its dot.
+        fun xFor(index: Int): Float = leftMargin + plotWidth * (index + 0.5f) / n
 
         fun yFor(value: Double): Float =
-            size.height - ((value - minValue) / valueRange * size.height).toFloat()
+            topMargin + plotHeight - ((value - minValue) / valueRange * plotHeight).toFloat()
 
-        // Three horizontal gridlines (min / mid / max) — enough to read
-        // relative scale without cluttering a small chart with labels.
+        val labelPaint = android.graphics.Paint().apply {
+            color = labelColor
+            textSize = 10.sp.toPx()
+            isAntiAlias = true
+        }
+
+        // Three horizontal gridlines (min / mid / max), each labelled with
+        // its value in lakhs so the chart can be read without the list.
         listOf(0f, 0.5f, 1f).forEach { frac ->
-            val y = size.height * (1 - frac)
-            drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+            val y = topMargin + plotHeight * (1 - frac)
+            drawLine(gridColor, Offset(leftMargin, y), Offset(size.width - rightMargin, y), strokeWidth = 1.dp.toPx())
+            labelPaint.textAlign = android.graphics.Paint.Align.RIGHT
+            drawContext.canvas.nativeCanvas.drawText(
+                formatLakh(minValue + valueRange * frac),
+                leftMargin - 6.dp.toPx(),
+                y + labelPaint.textSize / 3,
+                labelPaint
+            )
+        }
+
+        // Month label under every point.
+        labelPaint.textAlign = android.graphics.Paint.Align.CENTER
+        rows.forEachIndexed { i, r ->
+            drawContext.canvas.nativeCanvas.drawText(
+                monthLabel(r.forecast_date),
+                xFor(i),
+                size.height - 4.dp.toPx(),
+                labelPaint
+            )
+        }
+
+        // Divider between months with known actuals and future forecast months.
+        val firstFutureIndex = rows.indexOfFirst { it.actual_value == null }
+        if (firstFutureIndex > 0) {
+            val dividerX = leftMargin + plotWidth * firstFutureIndex / n
+            drawLine(
+                gridColor,
+                Offset(dividerX, topMargin),
+                Offset(dividerX, topMargin + plotHeight),
+                strokeWidth = 1.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f))
+            )
+            labelPaint.textAlign = android.graphics.Paint.Align.LEFT
+            drawContext.canvas.nativeCanvas.drawText(
+                "Forecast →",
+                dividerX + 4.dp.toPx(),
+                topMargin - 4.dp.toPx(),
+                labelPaint
+            )
         }
 
         val predictedPath = Path().apply {
@@ -275,6 +428,24 @@ private fun ForecastChart(rows: List<SalesForecast>, modifier: Modifier = Modifi
         }
     }
 }
+
+private val MONTH_NAMES = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+// "2026-08-01" -> "Aug 2026"
+private fun monthYear(date: String): String {
+    val month = date.substring(5, 7).toIntOrNull()?.let { MONTH_NAMES.getOrNull(it - 1) }
+    return if (month != null) "$month ${date.substring(0, 4)}" else date
+}
+
+// "2026-04-01" -> "Apr 26". Falls back to the raw string if it isn't a date.
+private fun monthLabel(date: String): String {
+    val month = date.substring(5, 7).toIntOrNull()?.let { MONTH_NAMES.getOrNull(it - 1) }
+    return if (month != null) "$month ${date.substring(2, 4)}" else date
+}
+
+// 3,270,612 -> "₹32.7L" (1 lakh = 100,000) — short enough for an axis label.
+private fun formatLakh(value: Double): String =
+    "₹" + String.format(Locale.US, "%.1fL", value / 100_000)
 
 private fun formatCurrency(value: Double): String =
     "₹" + String.format(Locale.US, "%,.0f", value)

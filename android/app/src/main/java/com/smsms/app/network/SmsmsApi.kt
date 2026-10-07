@@ -1,6 +1,9 @@
 package com.smsms.app.network
 
+import com.smsms.app.model.ActualsStatus
+import com.smsms.app.model.AddActualRequest
 import com.smsms.app.model.Batch
+import com.smsms.app.model.EnteredMonth
 import com.smsms.app.model.CreateBatchRequest
 import com.smsms.app.model.CreateOrderRequest
 import com.smsms.app.model.CreateQualityLogRequest
@@ -77,6 +80,12 @@ interface SmsmsApi {
 
     @GET("api/sales-forecast")
     suspend fun listSalesForecast(): Response<List<SalesForecast>>
+
+    @GET("api/sales-forecast/actuals")
+    suspend fun getActualsStatus(): Response<ActualsStatus>
+
+    @POST("api/sales-forecast/actuals")
+    suspend fun addActual(@Body body: AddActualRequest): Response<EnteredMonth>
 
     @POST("api/orders/{orderId}/payments")
     suspend fun createPayment(@Path("orderId") orderId: Int, @Body body: CreatePaymentRequest): Response<Payment>

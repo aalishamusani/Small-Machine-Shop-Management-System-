@@ -20,7 +20,13 @@ sealed class ForecastUiState {
         val rmse: Double?,
         val modelUsed: String?,
         val running: Boolean = false,
-        val runError: String? = null
+        val runError: String? = null,
+        // Month the Plant Head should enter next ("YYYY-MM-DD"), or null if
+        // none can be entered right now (month not finished / status failed).
+        val nextMonth: String? = null,
+        val addActualOpen: Boolean = false,
+        val savingActual: Boolean = false,
+        val actualError: String? = null
     ) : ForecastUiState()
     data class Error(val message: String) : ForecastUiState()
 }
@@ -37,8 +43,46 @@ class ForecastViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = ForecastUiState.Loading
             when (val result = OrdersRepository.listSalesForecast()) {
-                is ApiResult.Success -> _uiState.value = buildLoadedState(result.data)
+                is ApiResult.Success -> {
+                    // Failing to fetch the "next month" just hides the add
+                    // button - it shouldn't block viewing the forecast itself.
+                    val status = (OrdersRepository.getActualsStatus() as? ApiResult.Success)?.data
+                    val nextMonth = status?.next_month?.takeIf { status.can_enter }
+                    _uiState.value = buildLoadedState(result.data).copy(nextMonth = nextMonth)
+                }
                 is ApiResult.Failure -> _uiState.value = ForecastUiState.Error(result.message)
+            }
+        }
+    }
+
+    fun openAddActual() {
+        val loaded = _uiState.value as? ForecastUiState.Loaded ?: return
+        _uiState.value = loaded.copy(addActualOpen = true, actualError = null)
+    }
+
+    fun dismissAddActual() {
+        val loaded = _uiState.value as? ForecastUiState.Loaded ?: return
+        _uiState.value = loaded.copy(addActualOpen = false, actualError = null)
+    }
+
+    // Saves the real sales figure for `nextMonth`, then immediately re-runs
+    // the forecast so the new month is used for training/evaluation and the
+    // chart refreshes - one tap instead of "save" then "run forecast".
+    fun addActual(amount: Double) {
+        val loaded = _uiState.value as? ForecastUiState.Loaded ?: return
+        val month = loaded.nextMonth ?: return
+        _uiState.value = loaded.copy(savingActual = true, actualError = null)
+        viewModelScope.launch {
+            when (val result = OrdersRepository.addActual(month, amount)) {
+                is ApiResult.Success -> {
+                    val current = _uiState.value as? ForecastUiState.Loaded ?: return@launch
+                    _uiState.value = current.copy(addActualOpen = false, savingActual = false, nextMonth = null)
+                    runForecast()
+                }
+                is ApiResult.Failure -> {
+                    val current = _uiState.value as? ForecastUiState.Loaded ?: return@launch
+                    _uiState.value = current.copy(savingActual = false, actualError = result.message)
+                }
             }
         }
     }

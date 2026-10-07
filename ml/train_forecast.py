@@ -3,7 +3,10 @@ Phase 4 — Sales Forecasting (the main ML deliverable).
 
 Trains on data/SMSMS_monthly_sales_history.csv — 13 real months (Jul 2025
 through Jul 2026) of the shop's actual dispatched sales value, consolidated
-from raw Excel exports in SMSMS_EDA_SalesHistory.ipynb. That notebook's own
+from raw Excel exports in SMSMS_EDA_SalesHistory.ipynb. Months AFTER Jul 2026
+that the Plant Head enters through the app (monthly_actuals table) are added
+on top of the CSV on every run, so the model keeps learning as time passes.
+That notebook's own
 EDA conclusion drives the modeling choice here: one year of data is enough
 to see a trend, but NOT enough to reliably prove a repeating seasonal
 pattern (that needs at least 2 full annual cycles). So none of the three
@@ -73,6 +76,28 @@ def get_connection():
     )
 
 
+def load_entered_months() -> pd.DataFrame:
+    """Months the Plant Head entered through the app (after the CSV ends)."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT month, amount FROM monthly_actuals ORDER BY month")
+            rows = cur.fetchall()
+    except psycopg2.errors.UndefinedTable:
+        # Migration database/migration_monthly_actuals.sql hasn't been run
+        # yet — fall back to the CSV alone rather than failing outright.
+        print("Note: monthly_actuals table not found; training on the CSV only.")
+        rows = []
+    finally:
+        conn.close()
+    return pd.DataFrame(
+        {
+            "month": pd.to_datetime([r[0] for r in rows]),
+            "total_dispatch_amount": [float(r[1]) for r in rows],
+        }
+    )
+
+
 def moving_average_forecast(history: np.ndarray, steps: int) -> np.ndarray:
     """Flat-line the average of the last K real months forward.
 
@@ -132,8 +157,20 @@ def walk_forward_evaluate(values: np.ndarray, forecast_fn) -> dict:
 
 
 def main():
-    df = pd.read_csv(DATA_CSV, parse_dates=["month"])
+    df = pd.read_csv(DATA_CSV, parse_dates=["month"])[["month", "total_dispatch_amount"]]
+    entered = load_entered_months()
+    n_csv_months = len(df)
+    # If a month somehow appears in both, the app-entered figure wins.
+    df = pd.concat([df, entered]).drop_duplicates(subset="month", keep="last")
     df = df.sort_values("month").reset_index(drop=True)
+
+    # The models treat consecutive rows as consecutive months, so a gap
+    # would silently corrupt every prediction. The backend already blocks
+    # entering months out of order; this is the safety net behind it.
+    periods = df["month"].dt.to_period("M")
+    if len(pd.period_range(periods.iloc[0], periods.iloc[-1], freq="M")) != len(periods):
+        print("Sales history has a missing month in the middle; refusing to train.", file=sys.stderr)
+        sys.exit(1)
     values = df["total_dispatch_amount"].to_numpy(dtype=float)
     months = df["month"]
 
@@ -145,7 +182,10 @@ def main():
         )
         return
 
-    print(f"Loaded {len(values)} months: {months.iloc[0].date()} to {months.iloc[-1].date()}\n")
+    print(
+        f"Loaded {len(values)} months ({n_csv_months} from CSV + {len(df) - n_csv_months} entered in the app): "
+        f"{months.iloc[0].date()} to {months.iloc[-1].date()}\n"
+    )
 
     results = {}
     print("Walk-forward evaluation (lower is better):")
@@ -157,7 +197,7 @@ def main():
     winner = min(results, key=lambda name: results[name]["rmse"])
     print(f"\nBest model by RMSE: {winner}")
 
-    # Refit the winning model on ALL 13 months (evaluation is over —
+    # Refit the winning model on ALL months (evaluation is over —
     # for the real forecast we want it trained on every real data point
     # we have) and project forward.
     future_predictions = MODELS[winner](values, FUTURE_MONTHS_TO_FORECAST)
