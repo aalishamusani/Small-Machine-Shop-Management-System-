@@ -16,6 +16,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.smsms.app.auth.AuthManager
+import com.smsms.app.ui.anomaly.AnomalyScreen
 import com.smsms.app.ui.auth.LoginScreen
 import com.smsms.app.ui.forecast.ForecastScreen
 import com.smsms.app.ui.orders.CreateOrderScreen
@@ -28,6 +29,7 @@ object Routes {
     const val CREATE_ORDER = "orders/create"
     const val ORDER_DETAIL = "orders/{orderId}"
     const val FORECAST = "forecast"
+    const val ANOMALY = "anomaly"
     fun orderDetail(orderId: Int) = "orders/$orderId"
 }
 
@@ -64,8 +66,12 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
             OrderListScreen(
                 onOrderClick = { orderId -> navController.navigate(Routes.orderDetail(orderId)) },
                 onCreateOrderClick = { navController.navigate(Routes.CREATE_ORDER) },
-                onForecastClick = { navController.navigate(Routes.FORECAST) }
+                onForecastClick = { navController.navigate(Routes.FORECAST) },
+                onAnomalyClick = { navController.navigate(Routes.ANOMALY) }
             )
+        }
+        composable(Routes.ANOMALY) {
+            AnomalyScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.FORECAST) {
             ForecastScreen(onBack = { navController.popBackStack() })

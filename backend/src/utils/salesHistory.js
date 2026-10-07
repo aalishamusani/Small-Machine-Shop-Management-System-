@@ -16,6 +16,15 @@ function getCsvLastMonth() {
   return months.sort().pop();
 }
 
+// Monthly totals from the original CSV (2nd column), used to judge whether a
+// newly entered figure is plausible.
+function getCsvAmounts() {
+  const lines = fs.readFileSync(HISTORY_CSV, 'utf8').split(/\r?\n/).slice(1);
+  return lines
+    .map((line) => Number(line.split(',')[1]))
+    .filter((n) => Number.isFinite(n) && n > 0);
+}
+
 // '2026-07-01' -> '2026-08-01' (rolls over the year correctly: Dec -> Jan).
 function nextMonthAfter(monthStr) {
   const year = Number(monthStr.slice(0, 4));
@@ -32,4 +41,4 @@ function currentMonthStart() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
-module.exports = { getCsvLastMonth, nextMonthAfter, currentMonthStart };
+module.exports = { getCsvLastMonth, getCsvAmounts, nextMonthAfter, currentMonthStart };

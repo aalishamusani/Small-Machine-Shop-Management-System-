@@ -2,6 +2,8 @@ package com.smsms.app.network
 
 import com.smsms.app.model.ActualsStatus
 import com.smsms.app.model.AddActualRequest
+import com.smsms.app.model.AnomalyFlag
+import com.smsms.app.model.AnomalyRunResponse
 import com.smsms.app.model.Batch
 import com.smsms.app.model.EnteredMonth
 import com.smsms.app.model.CreateBatchRequest
@@ -22,6 +24,7 @@ import com.smsms.app.model.UpdatePaymentStatusRequest
 import com.smsms.app.model.UserSummary
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -81,11 +84,24 @@ interface SmsmsApi {
     @GET("api/sales-forecast")
     suspend fun listSalesForecast(): Response<List<SalesForecast>>
 
+    // Runs ml/anomaly_detection.py on the backend - a Python process, so give
+    // it the same longer timeout as the forecast run.
+    @LongRunning(readTimeoutSeconds = 60)
+    @POST("api/anomaly-detection/run")
+    suspend fun runAnomalyDetection(): Response<AnomalyRunResponse>
+
+    @GET("api/anomaly-flags")
+    suspend fun listAnomalyFlags(): Response<List<AnomalyFlag>>
+
     @GET("api/sales-forecast/actuals")
     suspend fun getActualsStatus(): Response<ActualsStatus>
 
     @POST("api/sales-forecast/actuals")
     suspend fun addActual(@Body body: AddActualRequest): Response<EnteredMonth>
+
+    // Undo: removes the most recently entered month.
+    @DELETE("api/sales-forecast/actuals/latest")
+    suspend fun removeLatestActual(): Response<EnteredMonth>
 
     @POST("api/orders/{orderId}/payments")
     suspend fun createPayment(@Path("orderId") orderId: Int, @Body body: CreatePaymentRequest): Response<Payment>

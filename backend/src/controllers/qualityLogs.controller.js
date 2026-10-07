@@ -52,8 +52,23 @@ async function createQualityLog(req, res) {
   if (batch.status === 'pending') {
     throw new AppError(400, 'Cannot log a quality check for a batch that has not started production yet.');
   }
-  if (qty_checked > batch.quantity) {
-    throw new AppError(400, `qty_checked (${qty_checked}) cannot exceed the batch quantity (${batch.quantity}).`);
+
+  // The cap applies to the RUNNING TOTAL across all of this batch's logs, not
+  // to each log on its own - otherwise three checks of 100 on a batch of 200
+  // would each look fine individually while 300 pieces "checked" is
+  // impossible. Each log is meant to cover different pieces, which is also
+  // what makes each log's defect rate comparable in anomaly detection.
+  const checkedResult = await db.query(
+    'SELECT COALESCE(SUM(qty_checked), 0) AS total FROM quality_logs WHERE batch_id = $1',
+    [batchId]
+  );
+  const alreadyChecked = Number(checkedResult.rows[0].total);
+  if (alreadyChecked + qty_checked > batch.quantity) {
+    const remaining = batch.quantity - alreadyChecked;
+    throw new AppError(
+      400,
+      `Only ${remaining} unit(s) left to check for this batch (${alreadyChecked} of ${batch.quantity} already checked).`
+    );
   }
 
   const pass_fail = defect_count === 0 ? 'pass' : 'fail';

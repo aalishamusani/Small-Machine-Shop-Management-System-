@@ -24,12 +24,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.smsms.app.auth.AuthManager
 import com.smsms.app.model.Order
@@ -42,6 +46,7 @@ fun OrderListScreen(
     onOrderClick: (Int) -> Unit,
     onCreateOrderClick: () -> Unit,
     onForecastClick: () -> Unit,
+    onAnomalyClick: () -> Unit,
     viewModel: OrderListViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -49,27 +54,35 @@ fun OrderListScreen(
     val role = session?.user?.role
     val coroutineScope = rememberCoroutineScope()
 
+    // Reload the list every time this screen becomes visible again (after
+    // creating an order, closing one in the detail screen, etc.).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.loadOrders(silent = true)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     // These mirror the server-side role checks in the backend routers —
     // hiding a button a role can't use isn't the actual security (the
     // server enforces that regardless), it's just not offering an action
     // that would only come back as a 403.
     val canCreateOrders = role == "production_head" || role == "plant_head"
     val canSeeForecast = role == "plant_head"
+    val canSeeAnomalies = role == "plant_head"
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Orders") },
                 actions = {
-                    session?.user?.let { user ->
-                        Text(
-                            "${user.username} (${user.role})",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
-                    }
                     if (canSeeForecast) {
                         TextButton(onClick = onForecastClick) { Text("Forecast") }
+                    }
+                    if (canSeeAnomalies) {
+                        TextButton(onClick = onAnomalyClick) { Text("Anomalies") }
                     }
                     TextButton(onClick = { coroutineScope.launch { AuthRepository.logout() } }) {
                         Text("Log out")
@@ -85,10 +98,17 @@ fun OrderListScreen(
             }
         }
     ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+        session?.user?.let { user ->
+            Text(
+                "Logged in as ${user.username} (${user.role})",
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
         ) {
             when (val state = uiState) {
                 is OrderListUiState.Loading ->
@@ -123,6 +143,7 @@ fun OrderListScreen(
                     }
                 }
             }
+        }
         }
     }
 }

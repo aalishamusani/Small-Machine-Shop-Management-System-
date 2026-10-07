@@ -99,7 +99,10 @@ fun ForecastScreen(
                     onRunForecast = { viewModel.runForecast() },
                     onAddActualClick = { viewModel.openAddActual() },
                     onAddActualDismiss = { viewModel.dismissAddActual() },
-                    onAddActualSave = { amount -> viewModel.addActual(amount) }
+                    onAddActualSave = { amount -> viewModel.addActual(amount) },
+                    onRemoveClick = { viewModel.openRemoveLast() },
+                    onRemoveDismiss = { viewModel.dismissRemoveLast() },
+                    onRemoveConfirm = { viewModel.removeLast() }
                 )
             }
         }
@@ -112,8 +115,27 @@ private fun ForecastContent(
     onRunForecast: () -> Unit,
     onAddActualClick: () -> Unit,
     onAddActualDismiss: () -> Unit,
-    onAddActualSave: (Double) -> Unit
+    onAddActualSave: (Double) -> Unit,
+    onRemoveClick: () -> Unit,
+    onRemoveDismiss: () -> Unit,
+    onRemoveConfirm: () -> Unit
 ) {
+    if (state.confirmRemoveOpen && state.lastEntered != null) {
+        AlertDialog(
+            onDismissRequest = onRemoveDismiss,
+            title = { Text("Remove ${monthYear(state.lastEntered.month)} sales?") },
+            text = {
+                Text(
+                    "This deletes the figure you entered for ${monthYear(state.lastEntered.month)} " +
+                        "(${formatCurrency(state.lastEntered.amount.toDoubleOrNull() ?: 0.0)}) and re-runs the forecast. " +
+                        "You can then enter it again."
+                )
+            },
+            confirmButton = { TextButton(onClick = onRemoveConfirm) { Text("Remove") } },
+            dismissButton = { TextButton(onClick = onRemoveDismiss) { Text("Cancel") } }
+        )
+    }
+
     if (state.addActualOpen && state.nextMonth != null) {
         AddActualDialog(
             month = state.nextMonth,
@@ -184,6 +206,18 @@ private fun ForecastContent(
             }
         }
 
+        if (state.lastEntered != null) {
+            TextButton(
+                onClick = onRemoveClick,
+                enabled = !state.running,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Text("Undo last entry (${monthYear(state.lastEntered.month)})")
+            }
+        }
+
         Button(
             onClick = onRunForecast,
             enabled = !state.running,
@@ -220,7 +254,10 @@ private fun AddActualDialog(
         title = { Text("Add ${monthYear(month)} sales") },
         text = {
             Column {
-                Text("Enter the total value of everything dispatched in ${monthYear(month)}, in rupees.")
+                Text(
+                    "Enter the total value of everything dispatched in ${monthYear(month)}, " +
+                        "as the full amount in rupees (for example 3200000 for 32 lakh)."
+                )
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = amountText,
@@ -230,6 +267,16 @@ private fun AddActualDialog(
                     enabled = !saving,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
+                // Echo the number back in full so a slip like "3.2" instead
+                // of "3200000" is obvious before saving.
+                if (amount != null && amount > 0) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "= ${formatCurrency(amount)}" +
+                            if (amount >= 100_000) "  (${String.format(Locale.US, "%.1f", amount / 100_000)} lakh)" else "",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 if (error != null) {
                     Spacer(Modifier.height(8.dp))
                     Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)

@@ -2,7 +2,7 @@ const db = require('../config/db');
 const AppError = require('../utils/AppError');
 const { runMlScript } = require('../utils/mlRunner');
 const { isValidDateString, isPositiveNumber } = require('../utils/validators');
-const { getCsvLastMonth, nextMonthAfter, currentMonthStart } = require('../utils/salesHistory');
+const { getCsvLastMonth, getCsvAmounts, nextMonthAfter, currentMonthStart } = require('../utils/salesHistory');
 
 // POST /api/sales-forecast/run
 async function runSalesForecast(req, res) {
@@ -85,6 +85,20 @@ async function addActual(req, res) {
     throw new AppError(400, `${month.slice(0, 7)} has not finished yet — sales can only be entered for completed months.`);
   }
 
+  // Typo guard: a figure wildly out of line with the shop's usual monthly
+  // sales is almost certainly a slip (e.g. 3.2 typed instead of 3200000)
+  // and would badly distort the forecast, so refuse it with a hint.
+  const known = [...getCsvAmounts(), ...status.entered.map((e) => Number(e.amount))];
+  const typical = known.reduce((a, b) => a + b, 0) / known.length;
+  if (amount < typical / 10 || amount > typical * 10) {
+    const lakh = (typical / 100000).toFixed(1);
+    throw new AppError(
+      400,
+      `${amount} looks ${amount < typical ? 'far too low' : 'far too high'} compared with usual monthly sales (about ${lakh} lakh). ` +
+        'Enter the full amount in rupees, e.g. 3200000.'
+    );
+  }
+
   try {
     const result = await db.query(
       `INSERT INTO monthly_actuals (month, amount, entered_by)
@@ -100,4 +114,19 @@ async function addActual(req, res) {
   }
 }
 
-module.exports = { runSalesForecast, listSalesForecast, getActualsStatus, addActual };
+// DELETE /api/sales-forecast/actuals/latest
+// Undo for a mistaken entry. Only the LATEST entered month can be removed -
+// removing one from the middle would leave a gap in the time series, which
+// the forecast can't handle. After removal the next month to enter is the
+// one just removed.
+async function removeLatestActual(req, res) {
+  const result = await db.query(
+    'DELETE FROM monthly_actuals WHERE month = (SELECT MAX(month) FROM monthly_actuals) RETURNING *'
+  );
+  if (result.rows.length === 0) {
+    throw new AppError(404, 'No entered months to remove.');
+  }
+  res.json(result.rows[0]);
+}
+
+module.exports = { runSalesForecast, listSalesForecast, getActualsStatus, addActual, removeLatestActual };

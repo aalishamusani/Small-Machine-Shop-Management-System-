@@ -59,6 +59,7 @@ fun OrderDetailScreen(
     var showAddBatchDialog by remember { mutableStateOf(false) }
     var qualityLogDialogBatch by remember { mutableStateOf<Batch?>(null) }
     var showRecordPaymentDialog by remember { mutableStateOf(false) }
+    var showCloseWithDueDialog by remember { mutableStateOf(false) }
 
     val session by AuthManager.session.collectAsState()
     val role = session?.user?.role
@@ -173,16 +174,56 @@ fun OrderDetailScreen(
 
                             if (canManageProduction) {
                                 Spacer(Modifier.height(16.dp))
+                                // "Closing" means PRODUCTION is finished (every
+                                // batch completed) - payment can still arrive
+                                // afterwards, so it is not blocked by money due.
+                                // But if money IS still due we say so clearly,
+                                // and ask for confirmation first.
+                                val amountDue = state.order.account_summary?.amount_due ?: 0.0
+                                val moneyStillDue = amountDue > 0
+                                if (state.order.status == "active" && moneyStillDue) {
+                                    Text(
+                                        "${formatCurrency(amountDue)} is still unpaid. Closing only marks production as " +
+                                            "complete; you can still record payments afterwards.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                }
                                 // Closing is deliberately allowed to fail
                                 // server-side (e.g. "2 batch(es) not
                                 // completed yet") rather than us trying to
                                 // perfectly replicate that rule here — the
                                 // server is the one source of truth for it.
                                 Button(
-                                    onClick = { viewModel.closeOrder() },
+                                    onClick = {
+                                        if (moneyStillDue) showCloseWithDueDialog = true else viewModel.closeOrder()
+                                    },
                                     enabled = state.order.status == "active" && !state.actionInProgress,
                                     modifier = Modifier.fillMaxWidth()
-                                ) { Text("Close order") }
+                                ) { Text("Mark production complete & close order") }
+
+                                if (showCloseWithDueDialog) {
+                                    AlertDialog(
+                                        onDismissRequest = { showCloseWithDueDialog = false },
+                                        title = { Text("Close with payment pending?") },
+                                        text = {
+                                            Text(
+                                                "${formatCurrency(amountDue)} is still due on this order. " +
+                                                    "Closing marks production as complete; payments can still be " +
+                                                    "recorded afterwards."
+                                            )
+                                        },
+                                        confirmButton = {
+                                            TextButton(onClick = {
+                                                showCloseWithDueDialog = false
+                                                viewModel.closeOrder()
+                                            }) { Text("Close anyway") }
+                                        },
+                                        dismissButton = {
+                                            TextButton(onClick = { showCloseWithDueDialog = false }) { Text("Cancel") }
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -415,7 +456,7 @@ private fun LogQualityCheckDialog(
                 OutlinedTextField(
                     value = qtyCheckedText,
                     onValueChange = { qtyCheckedText = it },
-                    label = { Text("Quantity checked (max ${batch.quantity})") },
+                    label = { Text("Quantity checked") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -426,6 +467,11 @@ private fun LogQualityCheckDialog(
                     label = { Text("Defect count") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Batch quantity is ${batch.quantity}. The total checked across all logs for this batch can't exceed it.",
+                    style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(

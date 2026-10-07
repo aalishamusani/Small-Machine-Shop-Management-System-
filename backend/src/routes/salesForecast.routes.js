@@ -11,5 +11,6 @@ router.get('/', asyncHandler(controller.listSalesForecast));
 // Plant Head only, enforced here on the server (like /run above).
 router.get('/actuals', requireRole('plant_head'), asyncHandler(controller.getActualsStatus));
 router.post('/actuals', requireRole('plant_head'), asyncHandler(controller.addActual));
+router.delete('/actuals/latest', requireRole('plant_head'), asyncHandler(controller.removeLatestActual));
 
 module.exports = router;

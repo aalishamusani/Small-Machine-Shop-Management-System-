@@ -2,6 +2,7 @@ package com.smsms.app.ui.forecast
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.smsms.app.model.EnteredMonth
 import com.smsms.app.model.SalesForecast
 import com.smsms.app.repository.OrdersRepository
 import com.smsms.app.util.ApiResult
@@ -26,7 +27,10 @@ sealed class ForecastUiState {
         val nextMonth: String? = null,
         val addActualOpen: Boolean = false,
         val savingActual: Boolean = false,
-        val actualError: String? = null
+        val actualError: String? = null,
+        // The most recently entered month, which the Plant Head may undo.
+        val lastEntered: EnteredMonth? = null,
+        val confirmRemoveOpen: Boolean = false
     ) : ForecastUiState()
     data class Error(val message: String) : ForecastUiState()
 }
@@ -48,9 +52,38 @@ class ForecastViewModel : ViewModel() {
                     // button - it shouldn't block viewing the forecast itself.
                     val status = (OrdersRepository.getActualsStatus() as? ApiResult.Success)?.data
                     val nextMonth = status?.next_month?.takeIf { status.can_enter }
-                    _uiState.value = buildLoadedState(result.data).copy(nextMonth = nextMonth)
+                    _uiState.value = buildLoadedState(result.data).copy(
+                        nextMonth = nextMonth,
+                        lastEntered = status?.entered?.lastOrNull()
+                    )
                 }
                 is ApiResult.Failure -> _uiState.value = ForecastUiState.Error(result.message)
+            }
+        }
+    }
+
+    fun openRemoveLast() {
+        val loaded = _uiState.value as? ForecastUiState.Loaded ?: return
+        _uiState.value = loaded.copy(confirmRemoveOpen = true)
+    }
+
+    fun dismissRemoveLast() {
+        val loaded = _uiState.value as? ForecastUiState.Loaded ?: return
+        _uiState.value = loaded.copy(confirmRemoveOpen = false)
+    }
+
+    // Undo the last entered month, then re-run the forecast so the saved
+    // results match the data again.
+    fun removeLast() {
+        val loaded = _uiState.value as? ForecastUiState.Loaded ?: return
+        _uiState.value = loaded.copy(confirmRemoveOpen = false, running = true, runError = null)
+        viewModelScope.launch {
+            when (val result = OrdersRepository.removeLatestActual()) {
+                is ApiResult.Success -> runForecast()
+                is ApiResult.Failure -> {
+                    val current = _uiState.value as? ForecastUiState.Loaded ?: return@launch
+                    _uiState.value = current.copy(running = false, runError = result.message)
+                }
             }
         }
     }

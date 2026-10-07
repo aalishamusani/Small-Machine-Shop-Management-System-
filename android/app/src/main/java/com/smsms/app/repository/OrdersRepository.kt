@@ -2,6 +2,8 @@ package com.smsms.app.repository
 
 import com.smsms.app.model.ActualsStatus
 import com.smsms.app.model.AddActualRequest
+import com.smsms.app.model.AnomalyFlag
+import com.smsms.app.model.AnomalyRunResponse
 import com.smsms.app.model.Batch
 import com.smsms.app.model.EnteredMonth
 import com.smsms.app.model.CreateBatchRequest
@@ -48,6 +50,15 @@ object OrdersRepository {
 
     suspend fun listSalesForecast(): ApiResult<List<SalesForecast>> =
         safeApiCall { api.listSalesForecast() }
+
+    suspend fun runAnomalyDetection(): ApiResult<AnomalyRunResponse> =
+        safeApiCall { api.runAnomalyDetection() }
+
+    suspend fun listAnomalyFlags(): ApiResult<List<AnomalyFlag>> =
+        safeApiCall { api.listAnomalyFlags() }
+
+    suspend fun removeLatestActual(): ApiResult<EnteredMonth> =
+        safeApiCall { api.removeLatestActual() }
 
     suspend fun getActualsStatus(): ApiResult<ActualsStatus> =
         safeApiCall { api.getActualsStatus() }

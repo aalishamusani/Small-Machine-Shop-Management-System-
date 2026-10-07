@@ -23,16 +23,23 @@ class OrderListViewModel : ViewModel() {
     private val _uiState = MutableStateFlow<OrderListUiState>(OrderListUiState.Loading)
     val uiState: StateFlow<OrderListUiState> = _uiState.asStateFlow()
 
-    init {
-        loadOrders()
-    }
-
-    fun loadOrders() {
+    // No load in init{}: the screen calls loadOrders(silent = true) every
+    // time it becomes visible (see OrderListScreen), which also covers the
+    // first visit. This ViewModel lives as long as the screen stays on the
+    // back stack, so loading only once at creation meant a newly created
+    // order never showed up when you came back from the create screen.
+    //
+    // silent = true keeps the current list on screen while refreshing
+    // instead of flashing a spinner, and keeps it if the refresh fails.
+    fun loadOrders(silent: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = OrderListUiState.Loading
+            val hadList = _uiState.value is OrderListUiState.Loaded
+            if (!(silent && hadList)) _uiState.value = OrderListUiState.Loading
             when (val result = OrdersRepository.listOrders()) {
                 is ApiResult.Success -> _uiState.value = OrderListUiState.Loaded(result.data)
-                is ApiResult.Failure -> _uiState.value = OrderListUiState.Error(result.message)
+                is ApiResult.Failure -> if (!(silent && hadList)) {
+                    _uiState.value = OrderListUiState.Error(result.message)
+                }
             }
         }
     }
