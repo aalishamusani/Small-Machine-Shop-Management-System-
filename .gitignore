@@ -30,3 +30,22 @@ Thumbs.db
 
 # --- Claude Code local session settings ---
 .claude/settings.local.json
+
+# Generated login passwords for the deployed app
+*.local.txt
+
+# --- Real shop data: never commit ---
+*.xlsx
+*.xls
+*.xlsm
+*.zip
+*.pdf
+*.dump
+*.bak
+*.sqlite
+data/raw/
+private_data/
+
+# Anonymised samples ARE allowed
+!sample_data/
+!sample_data/**
