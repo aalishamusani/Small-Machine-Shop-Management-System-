@@ -49,3 +49,7 @@ private_data/
 # Anonymised samples ARE allowed
 !sample_data/
 !sample_data/**
+
+# --- IDE files (Android Studio / IntelliJ) ---
+.idea/
+*.iml
