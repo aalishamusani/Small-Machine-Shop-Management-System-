@@ -4,6 +4,7 @@ import com.smsms.app.BuildConfig
 import com.smsms.app.auth.AuthInterceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import java.util.concurrent.TimeUnit
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
@@ -20,6 +21,13 @@ object ApiClient {
     }
 
     private val okHttpClient = OkHttpClient.Builder()
+        // The free hosting plan puts the backend to sleep when idle, and the
+        // first request after that can take 30-60 seconds while it wakes up.
+        // OkHttp's default of 10s would show "could not reach the server"
+        // for what is really just a slow start, so allow up to 60s.
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
         // Order matters: auth header gets added first, then the (larger)
         // logging interceptor logs the fully-built request including it.
         .addInterceptor(AuthInterceptor())

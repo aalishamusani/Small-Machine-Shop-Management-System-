@@ -77,7 +77,7 @@ interface SmsmsApi {
 
     // Spawns ml/train_forecast.py on the backend — a cold first run (loading
     // pandas/statsmodels from disk) can take well over the default 10s.
-    @LongRunning(readTimeoutSeconds = 60)
+    @LongRunning(readTimeoutSeconds = 120)
     @POST("api/sales-forecast/run")
     suspend fun runSalesForecast(): Response<SalesForecastRunResponse>
 
@@ -86,7 +86,7 @@ interface SmsmsApi {
 
     // Runs ml/anomaly_detection.py on the backend - a Python process, so give
     // it the same longer timeout as the forecast run.
-    @LongRunning(readTimeoutSeconds = 60)
+    @LongRunning(readTimeoutSeconds = 120)
     @POST("api/anomaly-detection/run")
     suspend fun runAnomalyDetection(): Response<AnomalyRunResponse>
 

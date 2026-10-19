@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Needed to call the backend API. usesCleartextTraffic below is a
-         DEV-ONLY convenience because the backend runs on plain http:// —
-         a real deployment should serve the API over https:// and this
-         permission/flag pair should be tightened accordingly. -->
+    <!-- Needed to call the backend API. Plain http:// is allowed ONLY in
+         the debug build (local backend); the release build sets
+         usesCleartext to false in build.gradle.kts, so the live app can
+         talk to the server over https:// only. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
@@ -13,7 +13,7 @@
         android:icon="@android:drawable/sym_def_app_icon"
         android:label="@string/app_name"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="${usesCleartext}">
 
         <activity
             android:name=".MainActivity"

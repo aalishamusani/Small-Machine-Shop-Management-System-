@@ -1,0 +1,13 @@
+# Keep the Docker build context small and keep local-only things out of the image.
+.git
+.idea
+android
+docs
+database
+backend/node_modules
+ml/.venv
+**/__pycache__
+**/.env
+*.iml
+data/*.zip
+data/*.ipynb

@@ -4,6 +4,15 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Address of the LIVE backend, used only by the release (installable APK)
+// build. Pass it when building:  gradlew assembleRelease -PsmsmsBaseUrl=https://your-app.onrender.com/
+val liveBaseUrl: String = (project.findProperty("smsmsBaseUrl") as String?) ?: "https://CHANGE-ME.onrender.com/"
+
+// Address the DEBUG build talks to. Default = the emulator's alias for this PC.
+// For a same-Wi-Fi demo on a real phone, pass the PC's address when building:
+//   gradlew assembleDebug -PsmsmsDebugBaseUrl=http://172.16.87.142:4000/
+val debugBaseUrl: String = (project.findProperty("smsmsDebugBaseUrl") as String?) ?: "http://10.0.2.2:4000/"
+
 android {
     namespace = "com.smsms.app"
     compileSdk = 34
@@ -23,8 +32,22 @@ android {
     }
 
     buildTypes {
+        // Debug = what Android Studio's Run button builds: talks to the
+        // backend on your own PC (emulator address above) over plain http.
+        debug {
+            buildConfigField("String", "BASE_URL", "\"$debugBaseUrl\"")
+            manifestPlaceholders["usesCleartext"] = "true"
+        }
+        // Release = the APK you share: talks to the live backend over https
+        // only (plain http is switched off).
         release {
             isMinifyEnabled = false
+            buildConfigField("String", "BASE_URL", "\"$liveBaseUrl\"")
+            manifestPlaceholders["usesCleartext"] = "false"
+            // Demo only: sign with the auto-generated debug key so the APK
+            // installs without creating a keystore. A real Play Store
+            // release would need its own signing key.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

@@ -1,0 +1,27 @@
+# Render "Blueprint": tells Render how to run the backend from this repo.
+# Secrets are NOT stored here - the values marked `sync: false` are typed
+# into Render's dashboard once, so they never end up in GitHub.
+services:
+  - type: web
+    name: smsms-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PGSSLMODE        # the cloud database requires an encrypted connection
+        value: require
+      - key: PGHOST
+        sync: false
+      - key: PGPORT
+        value: "5432"
+      - key: PGDATABASE
+        sync: false
+      - key: PGUSER
+        sync: false
+      - key: PGPASSWORD
+        sync: false
+      - key: JWT_SECRET       # Render generates a long random value for us
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 8h

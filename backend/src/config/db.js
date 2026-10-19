@@ -22,6 +22,11 @@ const pool = new Pool({
   database: process.env.PGDATABASE,
   user: process.env.PGUSER,
   password: process.env.PGPASSWORD,
+  // Cloud databases (Neon etc.) only accept encrypted connections. Set
+  // PGSSLMODE=require there; locally it's unset, so nothing changes. The
+  // Python scripts get the same behaviour for free: psycopg2/libpq reads
+  // PGSSLMODE from the environment by itself.
+  ssl: process.env.PGSSLMODE === 'require' ? true : false,
 });
 
 pool.on('error', (err) => {
